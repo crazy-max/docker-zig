@@ -14,7 +14,6 @@ RUN apk add --update  --no-cache \
     file \
     libstdc++ \
     libxml2-dev \
-    lld \
     lld-dev \
     lld-static \
     llvm12-libs \
@@ -66,12 +65,11 @@ set -x
 #cmake $(TARGETPLATFORM= TARGETPAIR=$ZIG_TARGET xx-clang --print-cmake-defines) -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DZIG_STATIC=ON ${CMAKE_CROSSOPTS} ..
 cmake $(TARGETPLATFORM= TARGETPAIR=$ZIG_TARGET xx-clang --print-cmake-defines) -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DZIG_STATIC_LLVM=ON ${CMAKE_CROSSOPTS} ..
 make DESTDIR="/out" install
-file /out/usr/bin/zig
-lld /out/usr/bin/zig
-#xx-verify --static /out/usr/bin/zig
 EOT
+RUN file /out/usr/bin/zig
+#RUN xx-verify --static /out/usr/bin/zig
 
-FROM zig-build AS zig-tgz
+FROM zig-build AS zig-build-tgz
 ARG TARGETOS
 ARG TARGETARCH
 ARG TARGETVARIANT

@@ -20,8 +20,8 @@ group "zig-tgz" {
   ]: "zig-${v}-tgz"]
 }
 
-target "zig-tgz-build" {
-  target = "zig-tgz"
+target "zig-tgz-base" {
+  target = "zig-static-tgz"
   args = {
     ZIG_VERSION = ZIG_VERSION
   }
@@ -30,14 +30,14 @@ target "zig-tgz-build" {
 }
 
 target "zig-linux-amd64-tgz" {
-  inherits = ["zig-tgz-build"]
+  inherits = ["zig-tgz-base"]
   args = {
     ZIG_TARGET = "linux-amd64"
   }
 }
 
 target "zig-linux-arm64-tgz" {
-  inherits = ["zig-tgz-build"]
+  inherits = ["zig-tgz-base"]
   args = {
     ZIG_TARGET = "linux-arm64"
   }
