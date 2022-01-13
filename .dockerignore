@@ -1,0 +1,12 @@
+/.dev
+/.idea
+/*.iml
+
+/.git
+/.github
+/dist
+/.editorconfig
+/.gitignore
+/CHANGELOG.md
+/LICENSE
+/README.md
