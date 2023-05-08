@@ -25,7 +25,7 @@ env:
 
 jobs:
   warmup:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       -
         name: Checkout
@@ -43,7 +43,7 @@ jobs:
             *.cache-to=type=gha,scope=base,mode=max
 
   prepare:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     outputs:
       matrix: ${{ steps.platforms.outputs.matrix }}
     steps:
@@ -57,7 +57,7 @@ jobs:
           echo "matrix=$(docker buildx bake archive-cross --print | jq -cr '.target."archive-cross".platforms')" >> $GITHUB_OUTPUT
 
   archive:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs:
       - warmup
       - prepare
@@ -96,7 +96,7 @@ jobs:
           retention-days: 1
 
   image:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs:
       - archive
     strategy:
@@ -153,7 +153,7 @@ jobs:
           retention-days: 1
 
   push:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs:
       - image
     services:
@@ -213,7 +213,7 @@ jobs:
             $(docker image ls --format '{{.Repository}}:{{.Tag}}' '${{ env.TMP_LOCAL_IMAGE }}' | tr '\n' ' ')
 
   release:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs:
       - archive
       - push
