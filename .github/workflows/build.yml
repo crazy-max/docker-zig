@@ -1,15 +1,240 @@
 name: build
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
+  schedule:
+    - cron: '0 8 */6 * *' # every 6 days
   push:
     branches:
       - 'main'
+    tags:
+      - '*'
+    paths-ignore:
+      - '**.md'
   pull_request:
+    paths-ignore:
+      - '**.md'
+
+env:
+  TMP_LOCAL_IMAGE: localhost:5000/crazymax/zig
+  DOCKERHUB_SLUG: crazymax/zig
+  GHCR_SLUG: ghcr.io/crazy-max/zig
 
 jobs:
-  build:
+  warmup:
     runs-on: ubuntu-latest
     steps:
       -
         name: Checkout
         uses: actions/checkout@v3
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      -
+        name: Build base (cache only)
+        uses: docker/bake-action@v3
+        with:
+          targets: base
+          set: |
+            *.cache-from=type=gha,scope=base
+            *.cache-to=type=gha,scope=base,mode=max
+
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.platforms.outputs.matrix }}
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v3
+      -
+        name: Create matrix
+        id: platforms
+        run: |
+          echo "matrix=$(docker buildx bake archive-cross --print | jq -cr '.target."archive-cross".platforms')" >> $GITHUB_OUTPUT
+
+  archive:
+    runs-on: ubuntu-latest
+    needs:
+      - warmup
+      - prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v3
+      -
+        name: Init
+        run: |
+          platform=${{ matrix.platform }}
+          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      -
+        name: Build
+        uses: docker/bake-action@v3
+        with:
+          targets: archive
+          set: |
+            *.platform=${{ matrix.platform }}
+            *.cache-from=type=gha,scope=base
+            *.cache-to=type=gha,scope=archive-${{ env.PLATFORM_PAIR }},mode=max
+      -
+        name: Upload archive
+        uses: actions/upload-artifact@v3
+        with:
+          name: zig
+          path: ./dist/*
+          if-no-files-found: error
+          retention-days: 1
+
+  image:
+    runs-on: ubuntu-latest
+    needs:
+      - archive
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v3
+      -
+        name: Init
+        run: |
+          mkdir -p /tmp/images
+          platform=${{ matrix.platform }}
+          echo "TARFILE=${platform//\//-}.tar" >> $GITHUB_ENV
+          echo "TAG=${{ env.TMP_LOCAL_IMAGE }}:${platform//\//-}" >> $GITHUB_ENV
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      -
+        name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: |
+            ${{ env.DOCKERHUB_SLUG }}
+            ${{ env.GHCR_SLUG }}
+          tags: |
+            type=match,pattern=(.*)-r,group=1
+            type=ref,event=pr
+            type=edge
+      -
+        name: Build
+        uses: docker/bake-action@v3
+        with:
+          files: |
+            ./docker-bake.hcl
+            ${{ steps.meta.outputs.bake-file }}
+          targets: image
+          set: |
+            *.platform=${{ matrix.platform }}
+            *.cache-from=type=gha,scope=base
+            *.cache-from=type=gha,scope=archive-${{ env.PLATFORM_PAIR }}
+            *.tags=${{ env.TAG }}
+            *.output=/tmp/images/${{ env.TARFILE }}
+      -
+        name: Upload image
+        uses: actions/upload-artifact@v3
+        with:
+          name: images
+          path: /tmp/images/${{ env.TARFILE }}
+          if-no-files-found: error
+          retention-days: 1
+
+  push:
+    runs-on: ubuntu-latest
+    needs:
+      - image
+    services:
+      registry:
+        image: registry:2
+        ports:
+          - 5000:5000
+    steps:
+      -
+        name: Download images
+        uses: actions/download-artifact@v3
+        with:
+          name: images
+          path: /tmp/images
+      -
+        name: Load images
+        run: |
+          for image in /tmp/images/*.tar; do
+            docker load -i $image
+          done
+      -
+        name: Push images to local registry
+        run: |
+          docker push -a ${{ env.TMP_LOCAL_IMAGE }}
+      -
+        name: Login to DockerHub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      -
+        name: Login to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      -
+        name: Docker meta
+        uses: docker/metadata-action@v4
+        with:
+          images: |
+            ${{ env.DOCKERHUB_SLUG }}
+            ${{ env.GHCR_SLUG }}
+          tags: |
+            type=match,pattern=(.*)-r,group=1
+            type=ref,event=pr
+            type=edge
+          sep-tags: ' '
+      -
+        name: Create manifest list and push
+        run: |
+          docker buildx imagetools create $([ "${{ github.event_name }}" = "pull_request" ] && echo "--dry-run" || true) \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(docker image ls --format '{{.Repository}}:{{.Tag}}' '${{ env.TMP_LOCAL_IMAGE }}' | tr '\n' ' ')
+
+  release:
+    runs-on: ubuntu-latest
+    needs:
+      - archive
+      - push
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v3
+      -
+        name: Download archives
+        uses: actions/download-artifact@v3
+        with:
+          name: zig
+          path: /tmp/dist
+      -
+        name: List artifacts
+        run: |
+          tree -nh /tmp/dist
+      -
+        name: GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: crazy-max/ghaction-github-release@v1
+        with:
+          draft: true
+          files: /tmp/dist/*

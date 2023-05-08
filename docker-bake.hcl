@@ -37,6 +37,11 @@ target "_platforms" {
   ]
 }
 
+// Special target: https://github.com/docker/metadata-action#bake-definition
+target "docker-metadata-action" {
+  tags = ["zig:local"]
+}
+
 group "default" {
   targets = ["archive"]
 }
@@ -48,7 +53,7 @@ target "base" {
 }
 
 target "image" {
-  inherits = ["_common"]
+  inherits = ["_common", "docker-metadata-action"]
   target = "dist"
 }
 
@@ -58,7 +63,6 @@ target "image-cross" {
 
 target "image-local" {
   inherits = ["image"]
-  tags = ["zig:local"]
   output = ["type=docker"]
 }
 
