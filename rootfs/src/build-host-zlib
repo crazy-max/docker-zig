@@ -1,0 +1,18 @@
+#!/usr/bin/env sh
+
+set -e
+
+. ./.vars
+
+mkdir -p "$BASEDIR/zlib-host"
+cd "$BASEDIR/zlib-host"
+
+# First build Zlib required by LLD.
+set -x
+
+cmake "/src/zlib" \
+  -DCMAKE_INSTALL_PREFIX="$HOSTDIR" \
+  -DCMAKE_PREFIX_PATH="$HOSTDIR" \
+  -DCMAKE_BUILD_TYPE=Release
+
+cmake --build . --target install

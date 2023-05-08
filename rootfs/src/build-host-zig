@@ -1,0 +1,25 @@
+#!/usr/bin/env sh
+
+set -e
+
+. ./.vars
+
+if [ -z "$ZIG_VERSION" ]; then
+  >&2 echo "ZIG_VERSION required"
+  exit 1
+fi
+
+mkdir -p "$BASEDIR/zig-host"
+cd "$BASEDIR/zig-host"
+
+# Now we build Zig, still with system C/C++ compiler, linking against LLVM,
+# Clang, LLD we just built from source.
+set -x
+
+cmake "/src/zig" \
+  -DCMAKE_INSTALL_PREFIX="$HOSTDIR" \
+  -DCMAKE_PREFIX_PATH="$HOSTDIR" \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DZIG_VERSION="$ZIG_VERSION"
+
+cmake --build . --target install

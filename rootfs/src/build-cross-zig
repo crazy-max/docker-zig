@@ -1,0 +1,25 @@
+#!/usr/bin/env sh
+
+set -e
+
+. ./.vars
+
+mkdir -p "$BASEDIR/zig"
+cd "$BASEDIR/zig"
+
+# Finally, we can cross compile Zig itself, with Zig.
+set -x
+
+cd "/src/zig"
+$ZIG build \
+  --prefix "/out/zig" \
+  --search-prefix "$RELEASEDIR" \
+  -Dstatic-llvm \
+  -Drelease \
+  -Dstrip \
+  -Dtarget="$TARGET" \
+  -Dcpu="$MCPU" \
+  -Dversion-string="$ZIG_VERSION" \
+  -Denable-stage1
+
+tree -nh "/out/zig"

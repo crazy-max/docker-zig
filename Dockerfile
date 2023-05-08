@@ -1,84 +1,106 @@
-# syntax=docker/dockerfile:1-labs
+# syntax=docker/dockerfile:1
 
-ARG ZIG_VERSION="0.8.1"
-ARG XX_VERSION="1.1.0"
+ARG ZIG_VERSION="0.10.1"
+ARG XX_VERSION="1.2.1"
+ARG ALPINE_VERSION="3.17"
+
+ARG MCPU="baseline"
+
+FROM --platform=${BUILDPLATFORM} alpine:${ALPINE_VERSION} AS src
+RUN apk add --update git
+WORKDIR /src
+RUN git init . && git remote add origin "https://github.com/ziglang/zig-bootstrap.git"
+ARG ZIG_VERSION
+RUN git fetch origin "${ZIG_VERSION}" && git checkout -q FETCH_HEAD
 
 FROM --platform=${BUILDPLATFORM:-linux/amd64} tonistiigi/xx:${XX_VERSION} AS xx
-FROM --platform=${BUILDPLATFORM:-linux/amd64} alpine:3.15 AS base
+FROM --platform=${BUILDPLATFORM:-linux/amd64} alpine:${ALPINE_VERSION} AS base
 COPY --from=xx / /
-RUN apk add --update  --no-cache \
-    clang-dev \
-    clang-libs \
-    clang-static \
+RUN apk add --update --no-cache \
+    binutils \
+    clang \
     cmake \
     file \
-    libstdc++ \
-    libxml2-dev \
-    lld-dev \
-    lld-static \
-    llvm12-libs \
-    llvm12-static \
-    llvm-dev \
+    gcc \
+    git \
+    linux-headers \
     make \
-    zlib-static
+    musl-dev \
+    patch \
+    pkgconf \
+    python3 \
+    tree
 
-FROM --platform=$BUILDPLATFORM alpine:3.15 AS zig
-RUN apk --update --no-cache add git patch
-WORKDIR /out
+FROM base AS build-base
+COPY --from=src /src /src
+WORKDIR /src
+COPY rootfs/src/.vars /src/
+
+FROM build-base AS build-host
+COPY rootfs/src/build-host-* /src/
 ARG ZIG_VERSION
-RUN git clone --branch $ZIG_VERSION https://github.com/ziglang/zig.git zig
-COPY patches patches
-RUN <<EOT
-set -ex
-for l in $(cat patches/aports.config); do
-  if [ "$(printf "$ver\n$l" | sort -V | head -n 1)" != "$ZIG_VERSION" ]; then
-    commit=$(echo $l | cut -d, -f2)
-    break
-  fi
-done
-mkdir -p aports && cd aports && git init
-git fetch --depth 1 https://github.com/alpinelinux/aports.git "$commit"
-git checkout FETCH_HEAD
-mkdir -p ../patches
-cp -a testing/zig/*.patch ../patches/
-cd - && rm -rf aports
-cd zig
-for f in ../patches/*.patch; do
-  patch -p1 < "$f"
-done
-EOT
+ARG MCPU
+ARG NPROC
+RUN --mount=type=cache,target=/out/base/zlib-host \
+    CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-host-zlib
+RUN --mount=type=cache,target=/out/base/zlib-host \
+    --mount=type=cache,target=/out/base/llvm-host \
+    CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-host-llvm
+RUN --mount=type=cache,target=/out/base/zlib-host \
+    --mount=type=cache,target=/out/base/llvm-host \
+    --mount=type=cache,target=/out/base/zig-host \
+    CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-host-zig
 
-FROM base as zig-build
-COPY --from=zig /out/zig /src
-WORKDIR /src/build
+FROM build-base AS build
+COPY --from=build-host /out /out
+COPY rootfs/src/build-cross-* /src/
+ARG ZIG_VERSION
+ARG MCPU
+ARG NPROC
+ARG TARGETPLATFORM
+RUN --mount=type=cache,target=/out/base/zlib-host \
+    --mount=type=cache,target=/out/base/llvm-host \
+    --mount=type=cache,target=/out/base/zig-host \
+    --mount=type=cache,target=/out/base/zlib,id=zlib-$TARGETPLATFORM \
+    CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-cross-zlib
+RUN --mount=type=cache,target=/out/base/zlib-host \
+    --mount=type=cache,target=/out/base/llvm-host \
+    --mount=type=cache,target=/out/base/zig-host \
+    --mount=type=cache,target=/out/base/zlib,id=zlib-$TARGETPLATFORM \
+    --mount=type=cache,target=/out/base/zstd,id=zstd-$TARGETPLATFORM \
+    CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-cross-zstd
+RUN --mount=type=cache,target=/out/base/zlib-host \
+    --mount=type=cache,target=/out/base/llvm-host \
+    --mount=type=cache,target=/out/base/zig-host \
+    --mount=type=cache,target=/out/base/zlib,id=zlib-$TARGETPLATFORM \
+    --mount=type=cache,target=/out/base/zstd,id=zstd-$TARGETPLATFORM \
+    --mount=type=cache,target=/out/base/llvm,id=llvm-$TARGETPLATFORM \
+    CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-cross-llvm
+RUN --mount=type=cache,target=/out/base/zlib-host \
+    --mount=type=cache,target=/out/base/llvm-host \
+    --mount=type=cache,target=/out/base/zig-host \
+    --mount=type=cache,target=/out/base/zlib,id=zlib-$TARGETPLATFORM \
+    --mount=type=cache,target=/out/base/zstd,id=zstd-$TARGETPLATFORM \
+    --mount=type=cache,target=/out/base/llvm,id=llvm-$TARGETPLATFORM \
+    --mount=type=cache,target=/out/base/zig,id=zig-$TARGETPLATFORM \
+    CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-cross-zig && \
+    xx-verify --static /out/zig/bin/zig
+
+FROM base AS tgz
+ARG ZIG_VERSION
 ARG TARGETOS
 ARG TARGETARCH
 ARG TARGETVARIANT
-ARG ZIG_TARGET=${TARGETOS}-${TARGETARCH}${TARGETVARIANT}
-RUN TARGETPLATFORM= TARGETPAIR=$ZIG_TARGET xx-apk add clang-dev gcc g++ libxml2-dev lld-dev llvm-dev
-RUN <<EOT
-set -e
-#if $(TARGETPLATFORM= TARGETPAIR=$ZIG_TARGET xx-info) is-cross; then
-#  CMAKE_CROSSOPTS="-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_HOST_SYSTEM_NAME=Linux"
-#fi
-set -x
-#cmake $(TARGETPLATFORM= TARGETPAIR=$ZIG_TARGET xx-clang --print-cmake-defines) -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DZIG_STATIC=ON ${CMAKE_CROSSOPTS} ..
-cmake $(TARGETPLATFORM= TARGETPAIR=$ZIG_TARGET xx-clang --print-cmake-defines) -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DZIG_STATIC_LLVM=ON ${CMAKE_CROSSOPTS} ..
-make DESTDIR="/out" install
+WORKDIR /dist
+RUN --mount=from=build,source=/out/zig,target=/zig <<EOT
+  set -e
+  mkdir /out
+  cd /zig
+  tar cvzf "/out/zig-$TARGETOS-$TARGETARCH$TARGETVARIANT.tar.gz" *
 EOT
-RUN file /out/usr/bin/zig
-#RUN xx-verify --static /out/usr/bin/zig
 
-FROM zig-build AS zig-build-tgz
-ARG TARGETOS
-ARG TARGETARCH
-ARG TARGETVARIANT
-ARG ZIG_TARGET
-WORKDIR /out
-RUN mkdir /out-tgz && tar cvzf /out-tgz/$ZIG_TARGET-zig-$TARGETOS-$TARGETARCH$TARGETVARIANT.tar.gz *
+FROM scratch AS dist
+COPY --from=build /out/zig /
 
-FROM scratch AS zig-static
-COPY --from=zig-build /out /
-
-FROM scratch AS zig-static-tgz
-COPY --from=zig-build-tgz /out-tgz/ /
+FROM scratch AS dist-tgz
+COPY --from=tgz /out /

@@ -1,44 +1,73 @@
 variable "ZIG_VERSION" {
-  default = "0.8.1"
+  default = null
+}
+
+variable "NPROC" {
+  default = null
+}
+
+target "_common" {
+  args = {
+    ZIG_VERSION = ZIG_VERSION
+    NPROC = NPROC
+  }
+}
+
+target "_platforms" {
+  platforms = [
+    "darwin/amd64",
+    "darwin/arm64",
+#    "freebsd/amd64",
+    "linux/386",
+    "linux/amd64",
+    "linux/arm/v5",
+    "linux/arm/v6",
+    "linux/arm/v7",
+    "linux/arm64",
+    "linux/ppc64le",
+    "linux/riscv64",
+#    "linux/s390x",
+#    "linux/mips",
+#    "linux/mipsle",
+#    "linux/mips64",
+#    "linux/mips64le",
+    "windows/amd64",
+    "windows/arm",
+    "windows/arm64"
+  ]
 }
 
 group "default" {
-  targets = ["zig-tgz"]
+  targets = ["archive"]
 }
 
-group "zig-tgz" {
-  targets = [for v in [
-    "linux-386",
-    "linux-amd64",
-    "linux-arm64",
-    "linux-armv6",
-    "linux-armv7",
-    "linux-ppc64le",
-    "linux-riscv64",
-    "linux-s390x",
-    "windows-amd64"
-  ]: "zig-${v}-tgz"]
+target "base" {
+  inherits = ["_common"]
+  target = "build-host"
+  output = ["type=cacheonly"]
 }
 
-target "zig-tgz-base" {
-  target = "zig-static-tgz"
-  args = {
-    ZIG_VERSION = ZIG_VERSION
-  }
-  //platforms = ["linux/amd64", "linux/arm64"]
+target "image" {
+  inherits = ["_common"]
+  target = "dist"
+}
+
+target "image-cross" {
+  inherits = ["image", "_platforms"]
+}
+
+target "image-local" {
+  inherits = ["image"]
+  tags = ["zig:local"]
+  output = ["type=docker"]
+}
+
+target "archive" {
+  inherits = ["_common"]
+  target = "dist-tgz"
   output = ["./dist"]
 }
 
-target "zig-linux-amd64-tgz" {
-  inherits = ["zig-tgz-base"]
-  args = {
-    ZIG_TARGET = "linux-amd64"
-  }
-}
-
-target "zig-linux-arm64-tgz" {
-  inherits = ["zig-tgz-base"]
-  args = {
-    ZIG_TARGET = "linux-arm64"
-  }
+target "archive-cross" {
+  inherits = ["tgz", "_platforms"]
 }

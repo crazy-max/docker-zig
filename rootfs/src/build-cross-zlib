@@ -1,0 +1,29 @@
+#!/usr/bin/env sh
+
+set -e
+
+. ./.vars
+
+mkdir -p "$BASEDIR/zlib"
+cd "$BASEDIR/zlib"
+
+# First cross compile zlib for the target, as we need the LLVM linked into
+# the finaly zig binary to have zlib support enabled.
+set -x
+
+cmake "/src/zlib" \
+  -DCMAKE_INSTALL_PREFIX="$RELEASEDIR" \
+  -DCMAKE_PREFIX_PATH="$RELEASEDIR" \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CROSSCOMPILING=True \
+  -DCMAKE_SYSTEM_NAME="$TARGET_OS_CMAKE" \
+  -DCMAKE_C_COMPILER="$ZIG;cc;-fno-sanitize=all;-s;-target;$TARGET;-mcpu=$MCPU" \
+  -DCMAKE_CXX_COMPILER="$ZIG;c++;-fno-sanitize=all;-s;-target;$TARGET;-mcpu=$MCPU" \
+  -DCMAKE_ASM_COMPILER="$ZIG;cc;-fno-sanitize=all;-s;-target;$TARGET;-mcpu=$MCPU" \
+  -DCMAKE_RC_COMPILER="$HOSTDIR/bin/llvm-rc" \
+  -DCMAKE_AR="$HOSTDIR/bin/llvm-ar" \
+  -DCMAKE_RANLIB="$HOSTDIR/bin/llvm-ranlib"
+
+cmake --build . --target install
+
+tree -nh "$RELEASEDIR"

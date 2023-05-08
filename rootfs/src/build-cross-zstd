@@ -1,0 +1,54 @@
+#!/usr/bin/env sh
+
+set -e
+
+. ./.vars
+
+cp "/src/zstd/lib/zstd.h" "$RELEASEDIR/include/zstd.h"
+cd "$RELEASEDIR/lib"
+
+# Same deal for zstd.
+# The build system for zstd is whack so I just put all the files here.
+set -x
+
+$ZIG build-lib \
+  --name zstd \
+  -target $TARGET \
+  -mcpu $MCPU \
+  -fstrip -OReleaseFast \
+  -lc \
+  "/src/zstd/lib/decompress/zstd_ddict.c" \
+  "/src/zstd/lib/decompress/zstd_decompress.c" \
+  "/src/zstd/lib/decompress/huf_decompress.c" \
+  "/src/zstd/lib/decompress/huf_decompress_amd64.S" \
+  "/src/zstd/lib/decompress/zstd_decompress_block.c" \
+  "/src/zstd/lib/compress/zstdmt_compress.c" \
+  "/src/zstd/lib/compress/zstd_opt.c" \
+  "/src/zstd/lib/compress/hist.c" \
+  "/src/zstd/lib/compress/zstd_ldm.c" \
+  "/src/zstd/lib/compress/zstd_fast.c" \
+  "/src/zstd/lib/compress/zstd_compress_literals.c" \
+  "/src/zstd/lib/compress/zstd_double_fast.c" \
+  "/src/zstd/lib/compress/huf_compress.c" \
+  "/src/zstd/lib/compress/fse_compress.c" \
+  "/src/zstd/lib/compress/zstd_lazy.c" \
+  "/src/zstd/lib/compress/zstd_compress.c" \
+  "/src/zstd/lib/compress/zstd_compress_sequences.c" \
+  "/src/zstd/lib/compress/zstd_compress_superblock.c" \
+  "/src/zstd/lib/deprecated/zbuff_compress.c" \
+  "/src/zstd/lib/deprecated/zbuff_decompress.c" \
+  "/src/zstd/lib/deprecated/zbuff_common.c" \
+  "/src/zstd/lib/common/entropy_common.c" \
+  "/src/zstd/lib/common/pool.c" \
+  "/src/zstd/lib/common/threading.c" \
+  "/src/zstd/lib/common/zstd_common.c" \
+  "/src/zstd/lib/common/xxhash.c" \
+  "/src/zstd/lib/common/debug.c" \
+  "/src/zstd/lib/common/fse_decompress.c" \
+  "/src/zstd/lib/common/error_private.c" \
+  "/src/zstd/lib/dictBuilder/zdict.c" \
+  "/src/zstd/lib/dictBuilder/divsufsort.c" \
+  "/src/zstd/lib/dictBuilder/fastcover.c" \
+  "/src/zstd/lib/dictBuilder/cover.c"
+
+tree -nh "$RELEASEDIR"
