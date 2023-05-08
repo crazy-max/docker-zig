@@ -69,5 +69,5 @@ target "archive" {
 }
 
 target "archive-cross" {
-  inherits = ["tgz", "_platforms"]
+  inherits = ["archive", "_platforms"]
 }
