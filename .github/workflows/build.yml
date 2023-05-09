@@ -94,7 +94,8 @@ jobs:
           set: |
             *.platform=${{ matrix.platform }}
             *.cache-from=type=gha,scope=base
-            *.cache-to=type=gha,scope=archive-${{ env.PLATFORM_PAIR }},mode=max
+            *.cache-from=type=gha,scope=archive-${{ env.PLATFORM_PAIR }}
+            *.cache-to=type=gha,scope=archive-${{ env.PLATFORM_PAIR }}
       -
         name: Upload archive
         uses: actions/upload-artifact@v3
