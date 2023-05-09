@@ -66,7 +66,7 @@ RUN CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-cross-zlib
 RUN CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-cross-zstd
 RUN CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-cross-llvm
 RUN CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-cross-zig && \
-    xx-verify --static /out/zig/bin/zig
+    xx-verify --static /out/zig/bin/zig$([ "$(xx-info os)" = "windows" ] && echo ".exe")
 # FIXME: mounts cache are not exported
 #RUN --mount=type=cache,target=/out/base/zlib-host \
 #    --mount=type=cache,target=/out/base/llvm-host \
