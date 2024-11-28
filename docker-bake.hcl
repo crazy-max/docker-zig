@@ -20,9 +20,10 @@ target "_platforms" {
 #    "freebsd/amd64",
     "linux/386",
     "linux/amd64",
-    "linux/arm/v5",
-    "linux/arm/v6",
-    "linux/arm/v7",
+# https://github.com/ziglang/zig/issues/6573
+#    "linux/arm/v5",
+#    "linux/arm/v6",
+#    "linux/arm/v7",
     "linux/arm64",
     "linux/ppc64le",
     "linux/riscv64",
@@ -37,6 +38,11 @@ target "_platforms" {
   ]
 }
 
+// Special target: https://github.com/docker/metadata-action#bake-definition
+target "docker-metadata-action" {
+  tags = ["zig:local"]
+}
+
 group "default" {
   targets = ["archive"]
 }
@@ -48,7 +54,7 @@ target "base" {
 }
 
 target "image" {
-  inherits = ["_common"]
+  inherits = ["_common", "docker-metadata-action"]
   target = "dist"
 }
 
@@ -58,7 +64,6 @@ target "image-cross" {
 
 target "image-local" {
   inherits = ["image"]
-  tags = ["zig:local"]
   output = ["type=docker"]
 }
 

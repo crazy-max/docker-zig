@@ -41,15 +41,19 @@ COPY rootfs/src/build-host-* /src/
 ARG ZIG_VERSION
 ARG MCPU
 ARG NPROC
-RUN --mount=type=cache,target=/out/base/zlib-host \
-    CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-host-zlib
-RUN --mount=type=cache,target=/out/base/zlib-host \
-    --mount=type=cache,target=/out/base/llvm-host \
-    CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-host-llvm
-RUN --mount=type=cache,target=/out/base/zlib-host \
-    --mount=type=cache,target=/out/base/llvm-host \
-    --mount=type=cache,target=/out/base/zig-host \
-    CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-host-zig
+RUN CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-host-zlib
+RUN CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-host-llvm
+RUN CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-host-zig
+# FIXME: mounts cache are not exported
+#RUN --mount=type=cache,target=/out/base/zlib-host \
+#    CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-host-zlib
+#RUN --mount=type=cache,target=/out/base/zlib-host \
+#    --mount=type=cache,target=/out/base/llvm-host \
+#    CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-host-llvm
+#RUN --mount=type=cache,target=/out/base/zlib-host \
+#    --mount=type=cache,target=/out/base/llvm-host \
+#    --mount=type=cache,target=/out/base/zig-host \
+#    CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-host-zig
 
 FROM build-base AS build
 COPY --from=build-host /out /out
@@ -58,33 +62,39 @@ ARG ZIG_VERSION
 ARG MCPU
 ARG NPROC
 ARG TARGETPLATFORM
-RUN --mount=type=cache,target=/out/base/zlib-host \
-    --mount=type=cache,target=/out/base/llvm-host \
-    --mount=type=cache,target=/out/base/zig-host \
-    --mount=type=cache,target=/out/base/zlib,id=zlib-$TARGETPLATFORM \
-    CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-cross-zlib
-RUN --mount=type=cache,target=/out/base/zlib-host \
-    --mount=type=cache,target=/out/base/llvm-host \
-    --mount=type=cache,target=/out/base/zig-host \
-    --mount=type=cache,target=/out/base/zlib,id=zlib-$TARGETPLATFORM \
-    --mount=type=cache,target=/out/base/zstd,id=zstd-$TARGETPLATFORM \
-    CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-cross-zstd
-RUN --mount=type=cache,target=/out/base/zlib-host \
-    --mount=type=cache,target=/out/base/llvm-host \
-    --mount=type=cache,target=/out/base/zig-host \
-    --mount=type=cache,target=/out/base/zlib,id=zlib-$TARGETPLATFORM \
-    --mount=type=cache,target=/out/base/zstd,id=zstd-$TARGETPLATFORM \
-    --mount=type=cache,target=/out/base/llvm,id=llvm-$TARGETPLATFORM \
-    CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-cross-llvm
-RUN --mount=type=cache,target=/out/base/zlib-host \
-    --mount=type=cache,target=/out/base/llvm-host \
-    --mount=type=cache,target=/out/base/zig-host \
-    --mount=type=cache,target=/out/base/zlib,id=zlib-$TARGETPLATFORM \
-    --mount=type=cache,target=/out/base/zstd,id=zstd-$TARGETPLATFORM \
-    --mount=type=cache,target=/out/base/llvm,id=llvm-$TARGETPLATFORM \
-    --mount=type=cache,target=/out/base/zig,id=zig-$TARGETPLATFORM \
-    CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-cross-zig && \
-    xx-verify --static /out/zig/bin/zig
+RUN CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-cross-zlib
+RUN CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-cross-zstd
+RUN CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-cross-llvm
+RUN CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-cross-zig && \
+    xx-verify --static /out/zig/bin/zig$([ "$(xx-info os)" = "windows" ] && echo ".exe")
+# FIXME: mounts cache are not exported
+#RUN --mount=type=cache,target=/out/base/zlib-host \
+#    --mount=type=cache,target=/out/base/llvm-host \
+#    --mount=type=cache,target=/out/base/zig-host \
+#    --mount=type=cache,target=/out/base/zlib,id=zlib-$TARGETPLATFORM \
+#    CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-cross-zlib
+#RUN --mount=type=cache,target=/out/base/zlib-host \
+#    --mount=type=cache,target=/out/base/llvm-host \
+#    --mount=type=cache,target=/out/base/zig-host \
+#    --mount=type=cache,target=/out/base/zlib,id=zlib-$TARGETPLATFORM \
+#    --mount=type=cache,target=/out/base/zstd,id=zstd-$TARGETPLATFORM \
+#    CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-cross-zstd
+#RUN --mount=type=cache,target=/out/base/zlib-host \
+#    --mount=type=cache,target=/out/base/llvm-host \
+#    --mount=type=cache,target=/out/base/zig-host \
+#    --mount=type=cache,target=/out/base/zlib,id=zlib-$TARGETPLATFORM \
+#    --mount=type=cache,target=/out/base/zstd,id=zstd-$TARGETPLATFORM \
+#    --mount=type=cache,target=/out/base/llvm,id=llvm-$TARGETPLATFORM \
+#    CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-cross-llvm
+#RUN --mount=type=cache,target=/out/base/zlib-host \
+#    --mount=type=cache,target=/out/base/llvm-host \
+#    --mount=type=cache,target=/out/base/zig-host \
+#    --mount=type=cache,target=/out/base/zlib,id=zlib-$TARGETPLATFORM \
+#    --mount=type=cache,target=/out/base/zstd,id=zstd-$TARGETPLATFORM \
+#    --mount=type=cache,target=/out/base/llvm,id=llvm-$TARGETPLATFORM \
+#    --mount=type=cache,target=/out/base/zig,id=zig-$TARGETPLATFORM \
+#    CMAKE_BUILD_PARALLEL_LEVEL=${NPROC:-$(nproc)} ./build-cross-zig && \
+#    xx-verify --static /out/zig/bin/zig
 
 FROM base AS tgz
 ARG ZIG_VERSION
